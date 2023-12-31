@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AstroTeresin Wykresy Danych</title>
+    <meta http-equiv="refresh" content="60">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .current-value, .min-value, .avg-value, .max-value {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <canvas id="tempDewPointChart"></canvas>
+        <div id="tempCurrentValue" class="current-value"></div>
+        <div id="tempMinValue" class="min-value"></div>
+        <div id="tempAvgValue" class="avg-value"></div>
+        <div id="tempMaxValue" class="max-value"></div>
+
+        <div id="dewPointCurrentValue" class="current-value"></div>
+        <div id="dewPointMinValue" class="min-value"></div>
+        <div id="dewPointAvgValue" class="avg-value"></div>
+        <div id="dewPointMaxValue" class="max-value"></div>
+    </div>
+    <div>
+        <canvas id="humidityChart"></canvas>
+        <div id="humidityCurrentValue" class="current-value"></div>
+        <div id="humidityMinValue" class="min-value"></div>
+        <div id="humidityAvgValue" class="avg-value"></div>
+        <div id="humidityMaxValue" class="max-value"></div>
+    </div>
+    <div>
+        <canvas id="pressureChart"></canvas>
+        <div id="pressureCurrentValue" class="current-value"></div>
+        <div id="pressureMinValue" class="min-value"></div>
+        <div id="pressureAvgValue" class="avg-value"></div>
+        <div id="pressureMaxValue" class="max-value"></div>
+    </div>
+    <div>
+        <canvas id="combinedLuxVisibleIrChart"></canvas>
+        <div id="luxCurrentValue" class="current-value"></div>
+        <div id="luxMinValue" class="min-value"></div>
+        <div id="luxAvgValue" class="avg-value"></div>
+        <div id="luxMaxValue" class="max-value"></div>
+
+        <div id="visibleCurrentValue" class="current-value"></div>
+        <div id="visibleMinValue" class="min-value"></div>
+        <div id="visibleAvgValue" class="avg-value"></div>
+        <div id="visibleMaxValue" class="max-value"></div>
+
+        <div id="irCurrentValue" class="current-value"></div>
+        <div id="irMinValue" class="min-value"></div>
+        <div id="irAvgValue" class="avg-value"></div>
+        <div id="irMaxValue" class="max-value"></div>
+    </div>
+    <div>
+        <canvas id="sqmChart"></canvas>
+        <div id="sqmCurrentValue" class="current-value"></div>
+        <div id="sqmMinValue" class="min-value"></div>
+        <div id="sqmAvgValue" class="avg-value"></div>
+        <div id="sqmMaxValue" class="max-value"></div>
+    </div>
+
+    <script>
+        fetch('/data')
+            .then(response => response.json())
+            .then(data => {
+                const calculateSQM = lux => {
+                    return Math.log10(lux / 108000) / -0.4;
+                };
+
+                const updateValues = (elementIdPrefix, label, dataArray) => {
+                    const minValue = Math.min(...dataArray).toFixed(2);
+                    const avgValue = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length).toFixed(2);
+                    const maxValue = Math.max(...dataArray).toFixed(2);
+                    const lastValue = dataArray[dataArray.length - 1].toFixed(2);
+
+                    document.getElementById(`${elementIdPrefix}CurrentValue`).innerText = `${label} Current: ${lastValue}`;
+                    document.getElementById(`${elementIdPrefix}MinValue`).innerText = `${label} Min: ${minValue}`;
+                    document.getElementById(`${elementIdPrefix}AvgValue`).innerText = `${label} Avg: ${avgValue}`;
+                    document.getElementById(`${elementIdPrefix}MaxValue`).innerText = `${label} Max: ${maxValue}`;
+                };
+
+                const createMultiDataChart = (canvasId, datasets) => {
+                    const ctx = document.getElementById(canvasId).getContext('2d');
+                    return new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.map(item => item.DateTime),
+                            datasets: datasets
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: false
+                                }
+                            }
+                        }
+                    });
+                };
+
+                // Tworzenie wykresów i aktualizacja wartości
+                const tempData = data.map(item => item.Temp);
+                const dewPointData = data.map(item => item.DewPoint);
+                const humidityData = data.map(item => item.Humidity);
+                const pressureData = data.map(item => item.Pressure);
+                const luxData = data.map(item => item.Lux);
+                const visibleData = data.map(item => item.Visible);
+                const irData = data.map(item => item.IR);
+                const sqmData = data.map(item => calculateSQM(item.Lux));
+
+                createMultiDataChart('tempDewPointChart', [
+                    { label: 'Temperature', data: tempData, borderColor: 'red', borderWidth: 1 },
+                    { label: 'Dew Point', data: dewPointData, borderColor: 'blue', borderWidth: 1 }
+                ]);
+                createMultiDataChart('humidityChart', [
+                    { label: 'Humidity', data: humidityData, borderColor: 'green', borderWidth: 1 }
+                ]);
+                createMultiDataChart('pressureChart', [
+                    { label: 'Pressure', data: pressureData, borderColor: 'purple', borderWidth: 1 }
+                ]);
+                createMultiDataChart('combinedLuxVisibleIrChart', [
+                    { label: 'Lux', data: luxData, borderColor: 'orange', borderWidth: 1 },
+                    { label: 'Visible', data: visibleData, borderColor: 'yellow', borderWidth: 1 },
+                    { label: 'IR', data: irData, borderColor: 'pink', borderWidth: 1 }
+                ]);
+                createMultiDataChart('sqmChart', [
+                    { label: 'SQM', data: sqmData, borderColor: 'teal', borderWidth: 1 }
+                ]);
+
+                // Aktualizacja wartości obecnych, min, avg, max
+                updateValues('temp', 'Temperature', tempData);
+                updateValues('dewPoint', 'Dew Point', dewPointData);
+                updateValues('humidity', 'Humidity', humidityData);
+                updateValues('pressure', 'Pressure', pressureData);
+                updateValues('lux', 'Lux', luxData);
+                updateValues('visible', 'Visible', visibleData);
+                updateValues('ir', 'IR', irData);
+                updateValues('sqm', 'SQM', sqmData);
+            });
+    </script>
+</body>
+</html>

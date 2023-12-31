@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AstroTeresin Wykresy Danych</title>
+    <meta http-equiv="refresh" content="60">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .current-value, .min-value, .avg-value, .max-value {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <!-- Tutaj umieszczone są wszystkie elementy do wyświetlania wykresów -->
+
+    <script>
+        fetch('/data')
+            .then(response => response.json())
+            .then(data => {
+                const calculateSQM = lux => {
+                    return Math.log10(lux / 108000) / -0.4;
+                };
+
+                const updateValues = (elementIdPrefix, label, dataArray) => {
+                    const minValue = Math.min(...dataArray).toFixed(2);
+                    const avgValue = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length).toFixed(2);
+                    const maxValue = Math.max(...dataArray).toFixed(2);
+                    const lastValue = dataArray[dataArray.length - 1].toFixed(2);
+
+                    document.getElementById(`${elementIdPrefix}CurrentValue`).innerText = `${label} Current: ${lastValue}`;
+                    document.getElementById(`${elementIdPrefix}MinValue`).innerText = `${label} Min: ${minValue}`;
+                    document.getElementById(`${elementIdPrefix}AvgValue`).innerText = `${label} Avg: ${avgValue}`;
+                    document.getElementById(`${elementIdPrefix}MaxValue`).innerText = `${label} Max: ${maxValue}`;
+                };
+
+                const updateSQMColor = sqmValue => {
+                    const sqmElement = document.getElementById('sqmCurrentValue');
+                    if (sqmValue >= 18.0 && sqmValue < 19.1) {
+                        sqmElement.style.color = 'red';
+                    } else if (sqmValue >= 19.1 && sqmValue < 20.4) {
+                        sqmElement.style.color = 'orange';
+                    } else if (sqmValue >= 20.4 && sqmValue < 21.3) {
+                        sqmElement.style.color = 'yellow';
+                    } else if (sqmValue >= 21.3 && sqmValue < 21.5) {
+                        sqmElement.style.color = 'blue';
+                    } else if (sqmValue >= 21.5 && sqmValue < 21.7) {
+                        sqmElement.style.color = 'gray';
+                    } else if (sqmValue >= 21.7 && sqmValue <= 22.0) {
+                        sqmElement.style.color = 'black';
+                    } else {
+                        sqmElement.style.color = 'inherit'; // Domyślny kolor
+                    }
+                };
+
+                const sqmData = data.map(item => calculateSQM(item.Lux));
+                createMultiDataChart('sqmChart', [
+                    { label: 'SQM', data: sqmData, borderColor: 'teal', borderWidth: 1 }
+                ]);
+                updateValues('sqm', 'SQM', sqmData);
+
+                const lastSQMValue = sqmData[sqmData.length - 1];
+                updateSQMColor(lastSQMValue);
+
+                const createMultiDataChart = (canvasId, datasets) => {
+                    const ctx = document.getElementById(canvasId).getContext('2d');
+                    return new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.map(item => item.DateTime),
+                            datasets: datasets
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: false
+                                }
+                            }
+                        }
+                    });
+                };
+
+                // Tworzenie wykresów i aktualizacja wartości
+                const tempData = data.map(item => item.Temp);
+                const dewPointData = data.map(item => item.DewPoint);
+                const humidityData = data.map(item => item.Humidity);
+                const pressureData = data.map(item => item.Pressure);
+                const luxData = data.map(item => item.Lux);
+                const visibleData = data.map(item => item.Visible);
+                const irData = data.map(item => item.IR);
+                const sqmData = data.map(item => calculateSQM(item.Lux));
+
+                createMultiDataChart('tempDewPointChart', [
+                    { label: 'Temperature', data: tempData, borderColor: 'red', borderWidth: 1 },
+                    { label: 'Dew Point', data: dewPointData, borderColor: 'blue', borderWidth: 1 }
+                ]);
+                createMultiDataChart('humidityChart', [
+                    { label: 'Humidity', data: humidityData, borderColor: 'green', borderWidth: 1 }
+                ]);
+                createMultiDataChart('pressureChart', [
+                    { label: 'Pressure', data: pressureData, borderColor: 'purple', borderWidth: 1 }
+                ]);
+                createMultiDataChart('combinedLuxVisibleIrChart', [
+                    { label: 'Lux', data: luxData, borderColor: 'orange', borderWidth: 1 },
+                    { label: 'Visible', data: visibleData, borderColor: 'yellow', borderWidth: 1 },
+                    { label: 'IR', data: irData, borderColor: 'pink', borderWidth: 1 }
+                ]);
+                createMultiDataChart('sqmChart', [
+                    { label: 'SQM', data: sqmData, borderColor: 'teal', borderWidth: 1 }
+                ]);
+
+                // Aktualizacja wartości obecnych, min, avg, max
+                updateValues('temp', 'Temperature', tempData);
+                updateValues('dewPoint', 'Dew Point', dewPointData);
+                updateValues('humidity', 'Humidity', humidityData);
+                updateValues('pressure', 'Pressure', pressureData);
+                updateValues('lux', 'Lux', luxData);
+                updateValues('visible', 'Visible', visibleData);
+                updateValues('ir', 'IR', irData);
+                updateValues('sqm', 'SQM', sqmData);
+
+            });
+    </script>
+</body>
+</html>

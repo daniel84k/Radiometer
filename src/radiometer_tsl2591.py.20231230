@@ -8,7 +8,6 @@ import board
 import busio
 from adafruit_extended_bus import ExtendedI2C as I2C
 import adafruit_tsl2591
-import adafruit_mlx90614
 import adafruit_bme280
 from adafruit_bme280 import basic as adafruit_bme280
 
@@ -41,15 +40,15 @@ class RadiometerDataLogger:
         os.makedirs(DATA_DIR, exist_ok=True)
         self.filename = "R" + self.name + datetime.datetime.now().strftime("%Y%m%d") + ".csv"
 
-    def log_data(self, obs_time, lux_value, vis_level, ir_level, again, atime, temp, humidity, pressure, dew_point, mlx_temp):
+    def log_data(self, obs_time, lux_value, vis_level, ir_level, again, atime, temp, humidity, pressure, dew_point):
         try:
             filename = "R" + self.name + obs_time.strftime("%Y%m%d") + ".csv"
             if filename != self.filename:
                 self.filename = filename
 
             with open(DATA_DIR + self.filename, "a") as file:
-                out_string = '{0:s} {1:.9f} {2:1f} {3:1f} {4:.1f} {5:.1f} {6:.2f} {7:.2f} {8:.2f} {9:.2f} {10:.2f}\n'.format(
-                    obs_time.strftime("%Y/%m/%d %H:%M:%S.%f")[:-3], lux_value, vis_level, ir_level, again, atime, temp, humidity, pressure, dew_point, mlx_temp)
+                out_string = '{0:s} {1:.9f} {2:1f} {3:1f} {4:.1f} {5:.1f} {6:.2f} {7:.2f} {8:.2f} {9:.2f}\n'.format(
+                    obs_time.strftime("%Y/%m/%d %H:%M:%S.%f")[:-3], lux_value, vis_level, ir_level, again, atime, temp, humidity, pressure, dew_point)
                 file.write(out_string)
 
         except Exception as e:
@@ -137,9 +136,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signalHandler)
     signal.signal(signal.SIGTERM, signalHandler)
 
-
     i2c = I2C(args['bus'])
-    mlx = adafruit_mlx90614.MLX90614(i2c)
     bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
 
     if args['multiplexer'] is not None:
@@ -156,8 +153,7 @@ if __name__ == "__main__":
             time_stamp = datetime.datetime.now()
             lux, vis_level, ir_level, again, atime = sensor.get_light_levels()
             temp, wilgotnosc, cisnienie, punkt_rosy = read_bme280_data(bme280)
-            mlx_temp = mlx.object_temperature
-            radiometer_data_logger.log_data(time_stamp, lux, vis_level, ir_level, again, atime, temp, wilgotnosc, cisnienie, punkt_rosy, mlx_temp)
+            radiometer_data_logger.log_data(time_stamp, lux, vis_level, ir_level, again, atime, temp, wilgotnosc, cisnienie, punkt_rosy)
             if args['verbose']:
                 print(f"Log: {time_stamp}, Lux: {lux}, Temp: {temp}, Gain: {again}")
 

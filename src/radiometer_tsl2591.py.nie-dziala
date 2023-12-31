@@ -1,0 +1,135 @@
+import argparse
+import datetime
+import os
+import signal
+import threading
+import time
+import numpy as np
+import syslog
+import board
+import busio
+from adafruit_extended_bus import ExtendedI2C as I2C
+import adafruit_tsl2591
+import adafruit_bme280
+from adafruit_bme280 import basic as adafruit_bme280
+
+# Ścieżka do katalogu danych
+DATA_DIR = os.path.expanduser('~/radiometer_data/')
+
+# Domyślny adres I2C dla czujnika TSL2591
+DEFAULT_I2C_ADDRESS = 0x29
+
+# Czas ochronny (w sekundach)
+GUARD_TIME = 10
+
+# Obsługa sygnałów zakończenia programu
+def signal_handler(signum, frame):
+    os._exit(0)
+
+# Odczyt danych z czujnika BME280
+def read_bme280_data(sensor):
+    temperatura = sensor.temperature
+    wilgotnosc = sensor.relative_humidity
+    cisnienie = sensor.pressure
+    punkt_rosy = calculate_dew_point(temperatura, wilgotnosc)
+    return temperatura, wilgotnosc, cisnienie, punkt_rosy
+
+# Obliczanie punktu rosy
+def calculate_dew_point(temperatura, wilgotnosc):
+    b = 17.62
+    c = 243.12
+    gamma = (b * temperatura) / (c + temperatura) + np.log(wilgotnosc / 100.0)
+    punkt_rosy = (c * gamma) / (b - gamma)
+    return punkt_rosy
+
+# Rozszerzona klasa dla czujnika TSL2591
+class TSL2591Extended(adafruit_tsl2591.TSL2591):
+    def calculate_lux(self):
+        try:
+            raw_luminosity = self.raw_luminosity
+            if raw_luminosity is None:
+                print("Błąd odczytu surowej luminancji")
+                return None
+
+            channel_0, channel_1 = raw_luminosity
+            atime = self.integration_time + 100.0
+            again = 1.0
+
+            if self.gain == adafruit_tsl2591.GAIN_MED:
+                again = 25.0
+            elif self.gain == adafruit_tsl2591.GAIN_HIGH:
+                again = 428.0
+            elif self.gain == adafruit_tsl2591.GAIN_MAX:
+                again = 9876.0
+
+            cpl = (atime * again) / 100.0
+            if cpl == 0:
+                print("Dzielenie przez zero! Wartość CPL wynosi 0.")
+                return None
+
+            lux1 = (channel_0 - 0.0304 * channel_1) / cpl
+            lux2 = (0.0325 * channel_0 - 0.336 * channel_1) / cpl
+
+            return max(0, lux1, lux2)
+        except Exception as e:
+            print("Błąd podczas obliczania luminancji:", e)
+            return None
+
+
+# Klasa do logowania danych z radiometru
+class RadiometerDataLogger:
+    def __init__(self, name=""):
+        self.name = name
+        os.makedirs(DATA_DIR, exist_ok=True)
+        self.filename = self.create_filename(datetime.datetime.now())
+
+    def create_filename(self, date_time):
+        return os.path.join(DATA_DIR, "R" + self.name + "_" + date_time.strftime("%Y%m%d") + ".csv")
+
+    def log_data(self, obs_time, lux, temp, humidity, pressure, dew_point):
+        filename = self.create_filename(obs_time)
+        with open(filename, "a") as file:
+            file.write(f'{obs_time.strftime("%Y/%m/%d %H:%M:%S.%f")[:-3]} {lux:.9f} {temp:.2f} {humidity:.2f} {pressure:.2f} {dew_point:.2f}\n')
+
+if __name__ == "__main__":
+    # Parsowanie argumentów linii poleceń
+    ap = argparse.ArgumentParser(description='Acquire light levels')
+    ap.add_argument("-a", "--address", type=lambda x: int(x, 0), default=DEFAULT_I2C_ADDRESS, help="Set the light sensor's i2c address. Default is " + hex(DEFAULT_I2C_ADDRESS))
+    ap.add_argument("-b", "--bus", type=int, default=1, help="Specify the i2c bus used for connecting the sensor e.g. 3 if /dev/i2c-3 has been created using dtoverlay. Default is bus 1")
+    ap.add_argument("-n", "--name", type=str, default="", help="Optional name of the sensor for the output file name. Default is no name")
+    args = ap.parse_args()
+
+    # Ustawienie obsługi sygnałów
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Inicjalizacja czujników
+    i2c = I2C(args.bus)
+    bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
+    sensor = TSL2591Extended(i2c, address=args.address)
+
+    # Ustawienia czujnika
+    sensor.enable()
+    sensor.gain = adafruit_tsl2591.GAIN_MED
+    sensor.integration_time = adafruit_tsl2591.INTEGRATIONTIME_100MS
+
+    # Inicjalizacja loggera danych
+    radiometer_data_logger = RadiometerDataLogger(name=args.name)
+
+    # Główna pętla programu
+    while True:
+        try:
+            time_stamp = datetime.datetime.now()
+            lux = sensor.calculate_lux()
+            if lux is not None:
+                temp, wilgotnosc, cisnienie, punkt_rosy = read_bme280_data(bme280)
+                radiometer_data_logger.log_data(time_stamp, lux, temp, wilgotnosc, cisnienie, punkt_rosy)
+                print(f"Log: {time_stamp}, Lux: {lux}, Temp: {temp}")
+            else:
+                print("Nie można odczytać poziomu oświetlenia")
+        except RuntimeError as e:
+            print("Błąd sensora: ", e)
+        except Exception as e:
+            print("Nieoczekiwany błąd: ", e)
+
+        time.sleep(GUARD_TIME)
